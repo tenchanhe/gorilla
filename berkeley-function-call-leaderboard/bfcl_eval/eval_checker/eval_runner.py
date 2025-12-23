@@ -801,6 +801,17 @@ def runner(
                 continue
 
             model_result = load_file(model_result_json, sort_by_id=True)
+            got_error = False
+            for result in model_result:
+                if isinstance(result["result"], str):
+                    got_error = True
+                    if result["result"].startswith("Error during inference:"):
+                        model_result.remove(result)
+            if got_error:
+                print(
+                    f"\33[93mHave errors during inference in the result file for {model_name} on {test_category}.\33[0m"
+                )
+
 
             leaderboard_table = evaluate_task(
                 test_category,
