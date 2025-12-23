@@ -1,3 +1,9 @@
+data_to_show/
+test_codes/
+run.sh
+score_confidence/
+streamlit_app.py
+
 build
 dist
 *.egg-info
