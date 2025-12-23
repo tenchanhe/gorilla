@@ -41,9 +41,10 @@ class OSSHandler(BaseHandler, EnforceOverrides):
         # Read from env vars with fallbacks
         self.local_server_endpoint = os.getenv("LOCAL_SERVER_ENDPOINT", "localhost")
         self.local_server_port = os.getenv("LOCAL_SERVER_PORT", LOCAL_SERVER_PORT)
+        self.local_server_api_key = os.getenv("LOCAL_SERVER_API_KEY")
 
         self.base_url = f"http://{self.local_server_endpoint}:{self.local_server_port}/v1"
-        self.client = OpenAI(base_url=self.base_url, api_key="EMPTY")
+        self.client = OpenAI(base_url=self.base_url, api_key=self.local_server_api_key)
 
     @override
     def inference(
@@ -51,21 +52,24 @@ class OSSHandler(BaseHandler, EnforceOverrides):
         test_entry: dict,
         include_input_log: bool,
         exclude_state_log: bool,
+        with_confidence_score: bool = False,
     ):
         # TODO: Let oss model support FC methods as well, depends on their model type
         if contain_multi_turn_interaction(test_entry["id"]):
             return self.inference_multi_turn_prompting(
-                test_entry, include_input_log, exclude_state_log
+                test_entry, include_input_log, exclude_state_log, with_confidence_score
             )
         else:
             return self.inference_single_turn_prompting(test_entry, include_input_log)
 
     @override
+    
     def decode_ast(self, result, language, has_tool_call_tag):
         return default_decode_ast_prompting(result, language, has_tool_call_tag)
 
     @override
     def decode_execute(self, result, has_tool_call_tag):
+        # print("Decoding execution result...OSSOSS")
         return default_decode_execute_prompting(result, has_tool_call_tag)
 
     @final
@@ -305,10 +309,16 @@ class OSSHandler(BaseHandler, EnforceOverrides):
         if hasattr(self, "skip_special_tokens"):
             extra_body["skip_special_tokens"] = self.skip_special_tokens
 
+        # 預設寫好的 phi4 名字不一樣（如果用phi4）
+        if "phi4" in self.model_path_or_id or "phi-4" in self.model_path_or_id:
+            inference_model = "phi4"
+        else:
+            inference_model = self.model_path_or_id
+
         start_time = time.time()
         if len(extra_body) > 0:
             api_response = self.client.completions.create(
-                model=self.model_path_or_id,
+                model=inference_model,
                 temperature=self.temperature,
                 prompt=formatted_prompt,
                 max_tokens=leftover_tokens_count,
@@ -317,7 +327,7 @@ class OSSHandler(BaseHandler, EnforceOverrides):
             )
         else:
             api_response = self.client.completions.create(
-                model=self.model_path_or_id,
+                model=inference_model,
                 temperature=self.temperature,
                 prompt=formatted_prompt,
                 max_tokens=leftover_tokens_count,
