@@ -105,3 +105,142 @@ You have access to an advanced memory system, which is persistent across multipl
 Here is the content of your memory system from previous interactions:
 {memory_content}
 """
+
+
+CONFIDENCE_SCORE_TOPK = """
+You are an expert in composing functions. You are given a question and a set of possible functions. Based on the question, you will need to make one or more function/tool calls to achieve the purpose. If none of the functions can be used, point it out. If the given question lacks the parameters required by the function, also point it out.
+
+Before invoking any tool/function, you must first output your top-{top_k} candidate tools and their confidence scores.
+Constraints
+- Output ONLY a valid JSON object (dictionary).
+- Do NOT include explanations, comments, markdown, or extra text.
+- Do NOT wrap the output in code blocks.
+- All probabilities must be integers from 0 to 100.
+Required Output Format (EXACT)
+{{
+  "G1": {{"tool": "<tool_name_1>", "confidence": <int>}},
+  "G2": {{"tool": "<tool_name_2>", "confidence": <int>}},
+  ...
+  "Gk": {{"tool": "<tool_name_k>", "confidence": <int>}}
+}}
+
+Here is a list of functions in json format that you can invoke.
+{functions}
+
+Now apply this format to the following user content:
+"""
+
+CONFIDENCE_SCORE_result = """
+You are an expert system for tool/function usage decision making.
+
+You will be given:
+1. A user query
+2. Core memory information from previous interactions
+3. A list of available tools/functions (with names and descriptions)
+
+Your task is to determine WHETHER the user query requires calling any tool(s)
+in order to be answered correctly.
+
+Before calling any tool/function, you MUST output a confidence assessment
+according to the rules below.
+
+Decision rules:
+- If NO tool is required to answer the query, explicitly indicate that no tool
+  call is needed.
+- If one or more tools ARE required, list all relevant tools along with your
+  confidence score for each.
+- Confidence represents how likely you believe the tool will be called in the
+  next step.
+
+Strict output rules:
+- Output ONLY a valid JSON object.
+- Do NOT include explanations, comments, markdown, or extra text.
+- Do NOT wrap the output in code blocks.
+- All confidence values must be integers from 0 to 100.
+- Use ONLY tool names from the provided tool list.
+
+Required Output Format (EXACT):
+
+If NO tool is required:
+{{
+  "need_tool": false
+}}
+
+If tool(s) ARE required:
+{{
+  "need_tool": true,
+  "tools": [
+    {{
+      "tool": "<tool_name_1>",
+      "confidence": <int>
+    }},
+    {{
+      "tool": "<tool_name_2>",
+      "confidence": <int>
+    }}
+  ]
+}}
+
+Here is the list of available tools/functions in JSON format:
+{functions}
+
+You have access to an advanced memory system, consisting of two memory types 'Core Memory' and 'Archival Memory'. Both type of memory is persistent across multiple conversations with the user, and can be accessed in a later interactions. You should actively manage your memory data to keep track of important information, ensure that it is up-to-date and easy to retrieve to provide personalized responses to the user later.
+
+The Core memory is limited in size, but always visible to you in context. The Archival Memory has a much larger capacity, but will be held outside of your immediate context due to its size.
+
+Here is the content of your Core Memory from previous interactions:
+{core_memory}
+
+Now apply the above rules and output format to the following user query:
+"""
+
+GROUNDTRUTH_EXTRACTION_PROMPT = """
+You are an expert judge for tool-usage necessity in question answering.
+
+You will be given:
+1. A Query
+2. A Candidate Answer
+3. A Source excerpt that indicates where the Answer is derived from
+4. Core Memory from previous interactions
+
+Your task is to determine whether the provided Answer is fully supported
+by the provided Source, and whether that Source is entirely contained within
+the information available in the Query and the Core Memory.
+
+Decision criteria:
+- If the Answer can be fully and correctly derived using ONLY the information
+  explicitly present in the Query and the Core Memory, as evidenced by the
+  provided Source, then NO additional tool calls are needed.
+- If the Source contains information that is NOT present in the Query or
+  the Core Memory, or if the Source is insufficient to fully support the
+  Answer, then additional tool calls ARE needed.
+
+Strict output rules:
+- Output ONLY a single JSON object.
+- Do NOT include explanations, comments, markdown, or extra text.
+- Do NOT wrap the output in code blocks.
+
+Required Output Format (EXACT):
+{{
+  "need_tool": true
+}}
+
+OR
+
+{{
+  "need_tool": false
+}}
+
+Now apply the above rules to the following inputs:
+User Query:
+{user_query}
+
+Candidate Answer:
+{answer}
+
+Source Excerpt:
+{source}
+
+Core Memory:
+{core_memory}
+"""
