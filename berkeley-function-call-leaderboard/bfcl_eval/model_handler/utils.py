@@ -489,14 +489,36 @@ def default_decode_ast_prompting(
 def default_decode_execute_prompting(
     result: str, has_tool_call_tag: bool = False
 ) -> list[str]:
-    # Note: For execute, there are only Python entries, so we don't need to check the language.
+    # # Note: For execute, there are only Python entries, so we don't need to check the language.
+    # result = result.strip("`\n ")
+    # if not result.startswith("["):
+    #     result = "[" + result
+    # if not result.endswith("]"):
+    #     result = result + "]"
+    # decoded_output = ast_parse(
+    #     result, language=ReturnFormat.PYTHON, has_tool_call_tag=has_tool_call_tag
+    # )
+    # return decoded_output_to_execution_list(decoded_output)
+ 
+    # remove surrounding backticks / whitespace
     result = result.strip("`\n ")
-    if not result.startswith("["):
-        result = "[" + result
-    if not result.endswith("]"):
-        result = result + "]"
+    # 找出所有 [ ... ] 中的內容（非貪婪）
+    matches = re.findall(r"\[(.*?)\]", result, flags=re.DOTALL)
+    # 如果找不到方括號，視原始行為保留並再包一層
+    if not matches:
+        if not result.startswith("["):
+            result = "[" + result
+        if not result.endswith("]"):
+            result = result + "]"
+        decoded_output = ast_parse(
+            result, language=ReturnFormat.PYTHON, has_tool_call_tag=has_tool_call_tag
+        )
+        return decoded_output_to_execution_list(decoded_output)
+    # 清理每個匹配的前後空白並以逗號串起
+    inner = ",".join(m.strip() for m in matches if m.strip())
+    inner = "[" + inner + "]"
     decoded_output = ast_parse(
-        result, language=ReturnFormat.PYTHON, has_tool_call_tag=has_tool_call_tag
+        inner, language=ReturnFormat.PYTHON, has_tool_call_tag=has_tool_call_tag
     )
     return decoded_output_to_execution_list(decoded_output)
 
