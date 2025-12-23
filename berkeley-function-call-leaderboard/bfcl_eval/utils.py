@@ -423,7 +423,7 @@ def load_dataset_entry(
 
     elif is_memory(test_category):
         # Memory categories
-        all_entries = load_file(PROMPT_PATH / f"{VERSION_PREFIX}_memory.json")
+        all_entries = load_file(PROMPT_PATH / f"{VERSION_PREFIX}_memory.json")  # Load the memory queries
         for scenario in MEMORY_SCENARIO_NAME:
             all_entries = process_memory_test_case(
                 all_entries, test_category, scenario, include_prereq=include_prereq
@@ -726,7 +726,7 @@ def process_memory_test_case(
     pre_req_ids = []
     # Create and modify pre-requisite entries so that their dependency are properly linked
     for entry in pre_req_entries:
-        entry["id"] = entry["id"].replace("memory", test_category)
+        entry["id"] = entry["id"].replace("memory", test_category)  # "memory_prereq_0-customer-0" -> "memory_kv_prereq_0-customer-0"
         entry["depends_on"] = deepcopy(pre_req_ids)
         entry["involved_classes"] = [backend_class_name]
         pre_req_ids.append(entry["id"])
@@ -803,9 +803,11 @@ def clean_up_memory_prereq_entries(test_cases: list[dict]) -> list[dict]:
     # Group test cases by their category to help identify the count
     test_cases_by_category = {}
     for entry in memory_entries:
+        # "memory_kv_prereq_0-customer-0" -> "memory_kv_prereq", "memory_0-customer-0" -> "memory_kv"
         test_category = extract_test_category_from_id(entry["id"])
         test_cases_by_category.setdefault(test_category, []).append(entry)
 
+    # 這一段只是檢查有沒有 prereq 的 entry，如果有但是沒有對應的非 prereq entry，就把它刪掉（無事發生）
     for test_category, category_test_cases in test_cases_by_category.items():
         if is_memory_prereq(test_category) and len(category_test_cases) != 0:
             if test_category.replace("_prereq", "") not in test_cases_by_category:

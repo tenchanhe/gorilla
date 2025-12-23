@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from bfcl_eval.constants.category_mapping import VERSION_PREFIX
 from bfcl_eval.constants.default_prompts import (
+    CONFIDENCE_SCORE_TOPK,
     DEFAULT_USER_PROMPT_FOR_ADDITIONAL_FUNCTION_FC,
     DEFAULT_USER_PROMPT_FOR_ADDITIONAL_FUNCTION_PROMPTING,
     MAXIMUM_STEP_LIMIT,
@@ -21,6 +22,7 @@ from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_utils import (
 from bfcl_eval.model_handler.utils import add_memory_instruction_system_prompt
 from bfcl_eval.utils import *
 from overrides import final
+import ast
 
 if TYPE_CHECKING:
     from bfcl_eval.eval_checker.multi_turn_eval.func_source_code.memory_api_metaclass import (
@@ -70,6 +72,7 @@ class BaseHandler:
         test_entry: dict,
         include_input_log: bool,
         exclude_state_log: bool,
+        with_confidence_score: bool = False,
     ):
         # This method is used to retrive model response for each model.
 
@@ -86,10 +89,15 @@ class BaseHandler:
         else:
             if contain_multi_turn_interaction(test_entry["id"]):
                 return self.inference_multi_turn_prompting(
-                    test_entry, include_input_log, exclude_state_log
+                    test_entry,
+                    include_input_log,
+                    exclude_state_log,
+                    with_confidence_score=with_confidence_score,
                 )
             else:
-                return self.inference_single_turn_prompting(test_entry, include_input_log)
+                return self.inference_single_turn_prompting(
+                    test_entry, include_input_log
+                )
 
     @final
     def inference_multi_turn_FC(
@@ -396,6 +404,86 @@ class BaseHandler:
         test_entry: dict,
         include_input_log: bool,
         exclude_state_log: bool,
+        with_confidence_score: bool = False,
+    ) -> tuple[list[list], dict]:
+        if not with_confidence_score:
+            return self._get_function_call_for_multi_turn(
+                test_entry, include_input_log, exclude_state_log
+            )
+
+        # --- New two-stage flow ---
+
+        # Stage 1: Get confidence score
+        # 先做 prereq 就好
+        if not is_memory_prereq(test_entry["id"]):
+            print("Not a memory prerequisite test entry. Skipping confidence score.")
+            confidence_score = -1.0
+        else:
+            print("Getting confidence score for memory prerequisite test entry.")
+            confidence_score = self._get_confidence_score(test_entry)
+
+        # Stage 2: Get function call using the original flow
+        all_model_response, metadata = self._get_function_call_for_multi_turn(
+            test_entry, include_input_log, exclude_state_log
+        )
+
+        # Combine results
+        metadata["confidence_score"] = confidence_score
+        return all_model_response, metadata
+
+    def _get_confidence_score(self, test_entry: dict) -> dict:
+        """
+        [New Method]
+        First stage of the two-stage flow. This method generates a prompt to ask for
+        the confidence score of calling a tool, calls the LLM, and parses the score.
+        """
+        print("--- Getting confidence score ---")
+        try:
+            # Create a deepcopy to avoid modifying the original test_entry, which is used in the second stage
+            test_entry_for_confidence = deepcopy(test_entry)
+            test_entry_function = test_entry_for_confidence.get("function", [])
+
+            all_multi_turn_messages: list[list[dict]] = test_entry_for_confidence[
+                "question"
+            ]
+            all_turn_confidence_scores = []
+            for turn_idx, turn_message in enumerate(all_multi_turn_messages):
+                if len(turn_message) > 1:
+                    raise ValueError("Each turn message should contain only one message.")
+
+                system_prompt = CONFIDENCE_SCORE.format(format='json', functions=test_entry_function)
+                inference_data = {
+                    "message": [
+                        {'role': 'system', 'content': system_prompt},
+                        {'role': 'user', 'content': turn_message[0]['content']}
+                    ],
+                    "function": test_entry_function
+                }
+
+                # Query the model
+                api_response, _ = self._query_prompting(inference_data)
+                print("API response for confidence score:", api_response)
+                model_response_data = self._parse_query_response_prompting(api_response)
+                response_text = model_response_data["model_responses"]
+
+                confidence_score = ast.literal_eval(response_text)
+                all_turn_confidence_scores.append(
+                    {
+                        "Turn": turn_idx,
+                        "Confidence Score": confidence_score,
+                    }
+                )
+            return all_turn_confidence_scores
+
+        except Exception as e:
+            print(f"Error while getting confidence score: {e}")
+            return -1.0
+
+    def _get_function_call_for_multi_turn(
+        self,
+        test_entry: dict,
+        include_input_log: bool,
+        exclude_state_log: bool,
     ) -> tuple[list[list], dict]:
         initial_config: dict = test_entry.get("initial_config", {})
         involved_classes: list = test_entry["involved_classes"]
@@ -434,6 +522,8 @@ class BaseHandler:
             ), "Memory category should only involve one class."
 
             memory_instance: "MemoryAPI" = list(involved_instances.values())[0]
+            # 把system prompt加到第0個question list裡
+            # scenario_setting, core memory, MEMORY_BACKEND_INSTRUCTION_CORE_ARCHIVAL
             test_entry["question"] = add_memory_instruction_system_prompt(
                 test_entry["question"],
                 test_category,
@@ -462,6 +552,8 @@ class BaseHandler:
             if len(state_log) > 0:
                 all_inference_log.append(state_log)
 
+        # 這邊只是 return {"message": [], "function": functions}
+        # 但會把剩下的 prompt 加到 test_entry["question"][0]
         inference_data: dict = self._pre_query_processing_prompting(test_entry)
 
         all_multi_turn_messages: list[list[dict]] = test_entry["question"]
@@ -550,6 +642,7 @@ class BaseHandler:
 
                 # Try decoding the model response
                 try:
+                    # e.g. "core_memory_add(key='user_name', value='Michael')"
                     decoded_model_responses = self.decode_execute(
                         model_responses, has_tool_call_tag=False
                     )

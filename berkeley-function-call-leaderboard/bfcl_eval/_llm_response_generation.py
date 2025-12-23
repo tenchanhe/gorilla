@@ -57,6 +57,12 @@ def get_args():
         default=None,
         help="Specify the path to a local directory containing the model's config/tokenizer/weights for fully offline inference. Use this only if the model weights are stored in a location other than the default HF_HOME directory.",
     )
+    parser.add_argument(
+        "--with-confidence-score",
+        action="store_true",
+        default=False,
+        help="[Prompting Models Only] Enable the two-stage inference process to get a confidence score before the function call.",
+    )
     args = parser.parse_args()
 
     return args
@@ -137,12 +143,19 @@ def collect_test_cases(args, model_name, all_test_categories, all_test_entries_i
                     pass
 
     existing_ids = [entry["id"] for entry in existing_result]
+    # breakpoint()
+    for entry in existing_result:
+        # Remove IDs that start with "Error during inference:"
+        if isinstance(entry["result"], str):
+            if entry["result"].startswith("Error during inference:"):
+                existing_ids.remove(entry["id"])
 
     test_cases_to_generate = [
         test_case
         for test_case in all_test_entries_involved
         if test_case["id"] not in existing_ids
     ]
+    # breakpoint()
 
     # Skip format sensitivity test cases for FC models
     if (
@@ -167,13 +180,19 @@ def collect_test_cases(args, model_name, all_test_categories, all_test_entries_i
     return sorted(test_cases_to_generate, key=sort_key)
 
 
-def multi_threaded_inference(handler, test_case, include_input_log, exclude_state_log):
+def multi_threaded_inference(
+    handler, test_case, include_input_log, exclude_state_log, with_confidence_score
+):
 
     assert type(test_case["function"]) is list
 
     try:
+        print("\033[96mwith_confidence_score:", with_confidence_score, "\033[0m")  # Cyan
         result, metadata = handler.inference(
-            deepcopy(test_case), include_input_log, exclude_state_log
+            deepcopy(test_case),
+            include_input_log,
+            exclude_state_log,
+            with_confidence_score=with_confidence_score,
         )
     except Exception as e:
         # This is usually the case when the model getting stuck on one particular test case.
@@ -287,6 +306,7 @@ def generate_results(args, model_name, test_cases_total):
                     test_case,
                     args.include_input_log,
                     args.exclude_state_log,
+                    args.with_confidence_score,
                 )
                 in_flight[future] = test_case_id
 
@@ -320,6 +340,7 @@ def generate_results(args, model_name, test_cases_total):
                         test_case,
                         args.include_input_log,
                         args.exclude_state_log,
+                        args.with_confidence_score,
                     )
                     in_flight[future] = test_case_id
 
