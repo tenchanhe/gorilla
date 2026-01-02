@@ -24,6 +24,7 @@ from bfcl_eval.model_handler.api_inference.openai_completion import (
     OpenAICompletionsHandler,
 )
 from bfcl_eval.model_handler.api_inference.openai_response import OpenAIResponsesHandler
+from bfcl_eval.model_handler.api_inference.ollama import OllamaHandler
 from bfcl_eval.model_handler.api_inference.qwen import (
     QwenAgentNoThinkHandler,
     QwenAgentThinkHandler,
@@ -1119,6 +1120,36 @@ api_inference_model_map = {
         output_price=None,
         is_fc_model=False,
         underscore_to_dot=False,
+    ),
+    "ollama/qwen3:4b-instruct": ModelConfig(
+        model_name="qwen3:4b-instruct",
+        display_name="qwen3:4b-instruct (Prompt)",
+        url="https://ollama.com/",
+        org="Ollama",
+        license="qwen",
+        model_handler=OllamaHandler,
+        is_fc_model=False,
+        underscore_to_dot=True,
+    ),
+    "ollama/qwen3:4b": ModelConfig(
+        model_name="qwen3:4b",
+        display_name="qwen3:4b (Prompt)",
+        url="https://ollama.com/",
+        org="Ollama",
+        license="qwen",
+        model_handler=OllamaHandler,
+        is_fc_model=False,
+        underscore_to_dot=True,
+    ),
+    "ollama/qwen3:32b": ModelConfig(
+        model_name="qwen3:32b",
+        display_name="qwen3:32b (Prompt)",
+        url="https://ollama.com/",
+        org="Ollama",
+        license="qwen",
+        model_handler=OllamaHandler,
+        is_fc_model=False,
+        underscore_to_dot=True,
     ),
 }
 

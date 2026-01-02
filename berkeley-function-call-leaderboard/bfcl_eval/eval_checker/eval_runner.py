@@ -804,8 +804,8 @@ def runner(
             got_error = False
             for result in model_result:
                 if isinstance(result["result"], str):
-                    got_error = True
                     if result["result"].startswith("Error during inference:"):
+                        got_error = True
                         model_result.remove(result)
             if got_error:
                 print(

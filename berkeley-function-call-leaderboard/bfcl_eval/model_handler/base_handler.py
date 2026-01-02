@@ -451,7 +451,7 @@ class BaseHandler:
                 if len(turn_message) > 1:
                     raise ValueError("Each turn message should contain only one message.")
 
-                system_prompt = CONFIDENCE_SCORE.format(format='json', functions=test_entry_function)
+                system_prompt = CONFIDENCE_SCORE_TOPK.format(format='json', functions=test_entry_function)
                 inference_data = {
                     "message": [
                         {'role': 'system', 'content': system_prompt},

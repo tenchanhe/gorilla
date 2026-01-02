@@ -25,6 +25,9 @@ def execute_multi_turn_func_call(
     if is_evaL_run:
         model_name += "_eval"
 
+    # Replace ":" with "-" in model name to avoid issues in instance naming
+    model_name = model_name.replace(":", "-")
+
     class_method_name_mapping = {}
     involved_instances = {}
     for class_name in involved_classes:
